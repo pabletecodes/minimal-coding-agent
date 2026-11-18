@@ -1,0 +1,21 @@
+{
+  "name": "minimal-coding-agent",
+  "version": "1.0.0",
+  "description": "A minimal coding agent for learning how agents like Claude Code work",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "agent": "tsx src/agent.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.106",
+    "ai": "^7.0.176",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
