@@ -49,11 +49,12 @@ export const tools: Record<string, Tool> = {
   }),
 
   read_file: defineTool({
-    description: "Read a file. Returns its contents with line numbers.",
+    description:
+      "Read a file. Each line is prefixed with its line number and a tab; that prefix is not part of the file.",
     inputSchema: z.object({ path: z.string() }),
     run: (input) => {
       const lines = fs.readFileSync(safePath(input.path), "utf8").split("\n");
-      return truncate(lines.map((line, i) => `${String(i + 1).padStart(4)}  ${line}`).join("\n"));
+      return truncate(lines.map((line, i) => `${i + 1}\t${line}`).join("\n"));
     },
   }),
 
@@ -72,7 +73,8 @@ export const tools: Record<string, Tool> = {
   edit_file: defineTool({
     description:
       "Replace an exact string in a file with a new string. old_string must appear exactly once, " +
-      "so include enough surrounding lines to make it unique.",
+      "so include enough surrounding lines to make it unique. Copy indentation exactly, and leave out " +
+      "the line-number prefix that read_file adds.",
     inputSchema: z.object({ path: z.string(), old_string: z.string(), new_string: z.string() }),
     needsPermission: true,
     run: (input) => {
