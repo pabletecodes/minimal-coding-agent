@@ -25,6 +25,18 @@ Or use an OAuth access token instead of an API key. It's only used when `ANTHROP
 export ANTHROPIC_AUTH_TOKEN=...
 ```
 
+### Or run a local model
+
+Any model served through an OpenAI-compatible API works, as long as it supports tool calling. With [Ollama](https://ollama.com):
+
+```bash
+ollama pull qwen3.6:27b
+export LOCAL_MODEL=qwen3.6:27b
+# For LM Studio, llama.cpp etc., also set LOCAL_BASE_URL (default: http://localhost:11434/v1)
+```
+
+Only `agent.ts` changes. The harness doesn't know or care which model it's running, so this is a good way to see how much of an agent's quality comes from the model.
+
 ## Usage
 
 Run it from inside the project you want it to work on. That folder is the agent's whole world.

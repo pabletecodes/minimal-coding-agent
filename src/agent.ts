@@ -39,17 +39,26 @@
 
 import readline from "node:readline/promises";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createHarness } from "./harness.ts";
 import { tools } from "./tools.ts";
 import { ENVIRONMENT_ROOT } from "./utils.ts";
 
-const MODEL = "claude-sonnet-5-5"; // change this to try another model
+// 🧠 Which model. Set LOCAL_MODEL to use a model running on your machine
+// instead of Claude, e.g. LOCAL_MODEL=qwen3.6:27b with Ollama. It must support
+// tool calling. The harness doesn't care which one it gets.
+const LOCAL_MODEL = process.env.LOCAL_MODEL;
+const MODEL = LOCAL_MODEL ?? "claude-sonnet-5-5"; // change this to try another Claude model
 
 // Credentials: an API key (sent as x-api-key) or an OAuth token (sent as
 // Authorization: Bearer). The SDK reads ANTHROPIC_API_KEY on its own; a token
 // has to be passed in, along with the beta header that enables OAuth.
 const authToken = process.env.ANTHROPIC_API_KEY ? undefined : process.env.ANTHROPIC_AUTH_TOKEN;
 const anthropic = createAnthropic(authToken ? { authToken, headers: { "anthropic-beta": "oauth-2025-04-20" } } : {});
+
+// Local servers (Ollama, LM Studio, llama.cpp) speak the OpenAI API. Ollama's
+// is on port 11434; set LOCAL_BASE_URL for the others.
+const local = createOpenAICompatible({ name: "local", baseURL: process.env.LOCAL_BASE_URL ?? "http://localhost:11434/v1" });
 
 const SYSTEM_PROMPT = `You are a coding agent working in the project at ${ENVIRONMENT_ROOT}.
 You can only see and change the project through your tools.
@@ -70,7 +79,7 @@ const harness = createHarness(
   // This agent's parts. There's no `agent` variable, because the agent only
   // exists while harness.runTask runs.
   {
-    model: anthropic(MODEL),
+    model: LOCAL_MODEL ? local(LOCAL_MODEL) : anthropic(MODEL),
     systemPrompt: SYSTEM_PROMPT,
     tools,
   },
