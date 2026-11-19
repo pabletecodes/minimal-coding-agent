@@ -63,7 +63,7 @@ npm test                                   # see the failure first
 npx tsx ../../src/agent.ts "The tests are failing. Find the bug and fix it."
 ```
 
-Watch the steps. A good run looks around (`list_files`, `read_file`), runs the tests, makes one `edit_file` and runs the tests again. Every step is one model call. Between calls, the harness runs the tools and appends their results to the context.
+Watch the output. A good run looks around (`list_files`, `read_file`), runs the tests, makes one `edit_file` and runs the tests again. Every `🧠 Asking the model...` line is one model call (one step). Between calls, the harness runs the tools and appends their results to the context.
 
 ### 2. Deny a permission request
 

@@ -67,7 +67,7 @@ async function loop(agentDefinition: AgentDefinition, ui: UserInterface, context
   const newMessages: ModelMessage[] = [];
 
   for (let step = 1; step <= MAX_STEPS; step++) {
-    ui.print(`\n━━━ Step ${step}/${MAX_STEPS} ━━━`);
+    ui.print("\n🧠 Asking the model...");
 
     // 🧠 One model call = one decision. We send the full context every time.
     // The SDK returns the model's requested tool calls and stops after this
