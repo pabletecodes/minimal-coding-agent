@@ -38,7 +38,7 @@
 //    code, decides what's allowed, and asks you before anything risky happens.
 
 import readline from "node:readline/promises";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createHarness } from "./harness.ts";
 import { tools } from "./tools.ts";
@@ -49,12 +49,6 @@ import { ENVIRONMENT_ROOT } from "./utils.ts";
 // tool calling. The harness doesn't care which one it gets.
 const LOCAL_MODEL = process.env.LOCAL_MODEL;
 const MODEL = LOCAL_MODEL ?? "claude-sonnet-5-5"; // change this to try another Claude model
-
-// Credentials: an API key (sent as x-api-key) or an OAuth token (sent as
-// Authorization: Bearer). The SDK reads ANTHROPIC_API_KEY on its own; a token
-// has to be passed in, along with the beta header that enables OAuth.
-const authToken = process.env.ANTHROPIC_API_KEY ? undefined : process.env.ANTHROPIC_AUTH_TOKEN;
-const anthropic = createAnthropic(authToken ? { authToken, headers: { "anthropic-beta": "oauth-2025-04-20" } } : {});
 
 // Local servers (Ollama, LM Studio, llama.cpp) speak the OpenAI API. Ollama's
 // is on port 11434; set LOCAL_BASE_URL for the others.

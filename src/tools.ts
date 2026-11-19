@@ -23,32 +23,22 @@ import { ENVIRONMENT_ROOT, safePath, truncate, walk } from "./utils.ts";
 export type Tool = {
   description: string; // for the model
   inputSchema: z.ZodType; // for the model
-  needsPermission: boolean; // for the harness: ask the human before running?
-  run: (input: any) => Promise<string>; // for the harness: the actual code
+  needsPermission?: boolean; // for the harness: ask the human before running?
+  run: (input: any) => string | Promise<string>; // for the harness: the actual code
 };
-
-// A helper so TypeScript knows the shape of `input` inside each tool's `run`.
-function defineTool<S extends z.ZodType>(t: {
-  description: string;
-  inputSchema: S;
-  needsPermission?: boolean;
-  run: (input: z.infer<S>) => string | Promise<string>;
-}): Tool {
-  return { ...t, needsPermission: t.needsPermission ?? false, run: async (input) => t.run(input) };
-}
 
 // --- The tools -------------------------------------------------------------
 
 // Each `run` returns a string, which becomes the tool result the model reads.
 // Throwing is fine: the harness catches it and sends the message back.
 export const tools: Record<string, Tool> = {
-  list_files: defineTool({
+  list_files: {
     description: "List all files in the project recursively (skips node_modules and .git).",
     inputSchema: z.object({ path: z.string().describe("Directory, relative to the project root. Use '.' for the root.") }),
     run: (input) => truncate(walk(safePath(input.path)).join("\n") || "(no files)"),
-  }),
+  },
 
-  read_file: defineTool({
+  read_file: {
     description:
       "Read a file. Each line is prefixed with its line number and a tab; that prefix is not part of the file.",
     inputSchema: z.object({ path: z.string() }),
@@ -56,9 +46,9 @@ export const tools: Record<string, Tool> = {
       const lines = fs.readFileSync(safePath(input.path), "utf8").split("\n");
       return truncate(lines.map((line, i) => `${i + 1}\t${line}`).join("\n"));
     },
-  }),
+  },
 
-  write_file: defineTool({
+  write_file: {
     description: "Create a new file, or overwrite an existing one with the given content.",
     inputSchema: z.object({ path: z.string(), content: z.string() }),
     needsPermission: true,
@@ -68,9 +58,9 @@ export const tools: Record<string, Tool> = {
       fs.writeFileSync(file, input.content);
       return `Wrote ${input.content.length} characters to ${input.path}`;
     },
-  }),
+  },
 
-  edit_file: defineTool({
+  edit_file: {
     description:
       "Replace an exact string in a file with a new string. old_string must appear exactly once, " +
       "so include enough surrounding lines to make it unique. Copy indentation exactly, and leave out " +
@@ -86,9 +76,9 @@ export const tools: Record<string, Tool> = {
       fs.writeFileSync(file, text.replace(input.old_string, () => input.new_string));
       return `Edited ${input.path}`;
     },
-  }),
+  },
 
-  search: defineTool({
+  search: {
     description: "Search for text across all project files, like grep. Returns file:line: matches.",
     inputSchema: z.object({ query: z.string().describe("Plain text to search for (case-sensitive).") }),
     run: (input) => {
@@ -101,18 +91,18 @@ export const tools: Record<string, Tool> = {
       }
       return truncate(matches.join("\n") || "No matches.");
     },
-  }),
+  },
 
-  run_command: defineTool({
+  run_command: {
     description: "Run a shell command in the project root (60s timeout). Returns stdout, stderr and exit code.",
     inputSchema: z.object({ command: z.string() }),
     needsPermission: true,
     run: (input) =>
-      new Promise((resolve) => {
+      new Promise<string>((resolve) => {
         exec(input.command, { cwd: ENVIRONMENT_ROOT, timeout: 60_000 }, (error, stdout, stderr) => {
           const exitCode = error ? (error.killed ? "killed (60s timeout)" : error.code) : 0;
           resolve(truncate(`exit code: ${exitCode}\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`));
         });
       }),
-  }),
+  },
 };

@@ -19,12 +19,6 @@ npm install
 export ANTHROPIC_API_KEY=sk-ant-...   # get one at https://console.anthropic.com
 ```
 
-Or use an OAuth access token instead of an API key. It's only used when `ANTHROPIC_API_KEY` is unset:
-
-```bash
-export ANTHROPIC_AUTH_TOKEN=...
-```
-
 ### Or run a local model
 
 Any model served through an OpenAI-compatible API works, as long as it supports tool calling. With [Ollama](https://ollama.com):
