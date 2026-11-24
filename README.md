@@ -2,6 +2,8 @@
 
 A small coding agent (under 400 lines including comments) for learning how agents like Claude Code work under the hood.
 
+![Demo: the agent running in the terminal on a local model](docs/demo.gif)
+
 - `src/agent.ts`: picks the 🤖 agent's parts (which model, which system prompt, which tools) and runs the command line. Start here.
 - `src/harness.ts`: the 🧰 harness: the loop, 📋 context, 🔒 permissions and stop conditions. Nothing in it is specific to coding.
 - `src/tools.ts`: the 🔧 tools, each defined in one place: the part the model sees (description, input schema) next to the code that actually runs
@@ -65,10 +67,11 @@ Run the same task, but answer `n` when the model asks to run `npm test` or to ed
 
 ### 3. Watch the context grow
 
-In `src/harness.ts`, right after `newMessages.push(...reply.response.messages);`, add:
+In `src/harness.ts`, right after `newMessages.push(...reply.finalStep.response.messages);`, add:
 
 ```ts
-console.log(`📋 context: ${messages.length} messages, ${JSON.stringify(messages).length} chars, ${reply.usage.inputTokens} input tokens`);
+const all = [...context, ...newMessages];
+console.log(`📋 context: ${all.length} messages, ${JSON.stringify(all).length} chars, ${reply.usage.inputTokens} input tokens`);
 ```
 
 Run experiment 1 again. Input tokens go up every step, because the whole history is resent on every call. This is why long sessions get slower and more expensive, and why truncating tool output (`MAX_OUTPUT` in utils.ts) matters.
@@ -85,7 +88,7 @@ Set `MAX_STEPS = 3` in `src/harness.ts` and give it a bigger task:
 npx tsx ../../src/agent.ts "Add power, modulo and square root functions, each with tests, and make sure all tests pass."
 ```
 
-It stops partway and prints `Stopped after 3 steps`. Here the harness ended the task, not the model. Then try interactive mode: give the same task, let it hit the limit, and type `continue`. Because the harness keeps its `context` between tasks, it picks up where it left off. Now type `clear` and then `continue`: with an empty context, the model has no idea what to continue.
+It stops partway and prints `Stopped after 3 steps`. Here the harness ended the task, not the model. Then try interactive mode: give the same task, let it hit the limit, and type `continue`. Because the session keeps its `context` between tasks, it picks up where it left off. Now type `clear` to start a new session and then `continue`: with an empty context, the model has no idea what to continue.
 
 ## How the loop ends
 
