@@ -23,12 +23,16 @@
 // 🌍 Environment: the project folder and the shell. They exist independently
 //    of the model, which can only see and change them through tools.
 //
+// 🗂️ Session: one conversation run by the harness, with its own context.
+//    It lasts across tasks until you start a new one (`clear`), which begins
+//    with an empty context. Same harness, same agent, nothing remembered.
+//
 // 📋 Context: everything the model sees on a call: the system prompt, the
-//    tool definitions and the `context` array in the harness. Every model
+//    tool definitions and the session's `context` array. Every model
 //    reply and every tool result is appended to that array, and all of it is
 //    resent on every call. It only grows.
 //
-// 🤖 Agent: not any one piece of code. It's what exists while the harness
+// 🤖 Agent: not any one piece of code. It's what exists while a session
 //    runs a model, a prompt and tools on a task in an environment. This file
 //    picks those parts for one agent, a coding agent. Pick a different prompt
 //    and tools and you get a different agent on the same harness.
@@ -71,7 +75,7 @@ const harness = createHarness(
     print: (message) => console.log(message),
   },
   // This agent's parts. There's no `agent` variable, because the agent only
-  // exists while harness.runTask runs.
+  // exists while a session's runTask runs.
   {
     model: LOCAL_MODEL ? local(LOCAL_MODEL) : anthropic(MODEL),
     systemPrompt: SYSTEM_PROMPT,
@@ -91,12 +95,13 @@ function describeError(error: any): string {
 async function main() {
   const task = process.argv.slice(2).join(" ");
   console.log(`🤖 Coding agent | model: ${MODEL} | project: ${ENVIRONMENT_ROOT}`);
+  let session = harness.startSession();
 
   if (task) {
     // One-shot mode: run the task, then exit.
-    await harness.runTask(task);
+    await session.runTask(task);
   } else {
-    // Interactive mode: the same harness, and so the same context, across
+    // Interactive mode: the same session, and so the same context, across
     // tasks, so the agent remembers earlier work. (The model doesn't
     // remember; the harness resends it.)
     // END #3, decided by you: an empty line, "exit", or Ctrl+C/Ctrl+D.
@@ -104,12 +109,12 @@ async function main() {
       const next = (await terminal.question("\n📝 Task (empty to quit, \"clear\" to forget): ").catch(() => "")).trim();
       if (!next || next === "exit") break;
       if (next === "clear") {
-        harness.clearContext();
-        console.log("🧹 Context cleared. The agent remembers nothing; the files keep their changes.");
+        session = harness.startSession(); // same harness, empty context
+        console.log("🧹 New session. The agent remembers nothing; the files keep their changes.");
         continue;
       }
       try {
-        await harness.runTask(next);
+        await session.runTask(next);
       } catch (error) {
         // END #4, decided by the world: an API error (bad key, network, rate limit).
         console.error(`\n💥 ${describeError(error)}`);

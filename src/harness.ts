@@ -31,31 +31,33 @@ export type AgentDefinition = {
   tools: Record<string, Tool>; // 🔧 what the model can ask the harness to do
 };
 
-// --- 2. The harness --------------------------------------------------------
+// --- 2. The harness and its sessions ---------------------------------------
 
-// Set up the harness: the generic machinery, reaching a human through `ui`
-// and running the agent that `agentDefinition` defines.
+// Set up the harness once: the generic machinery, reaching a human through
+// `ui` and running the agent that `agentDefinition` defines. Like Claude Code,
+// it can run many sessions, one after another.
 export function createHarness(ui: UserInterface, agentDefinition: AgentDefinition) {
-  // 📋 The context carries over between tasks. The model remembers nothing
-  // between calls. What it sees on each call is this array plus the system
-  // prompt and the tool definitions, which are resent unchanged every time.
-  const context: ModelMessage[] = [];
+  // Start a session: one context, run by this harness. Sessions share the
+  // agent and the UI, but never see each other's context. A new session
+  // remembers nothing; the environment keeps every change already made.
+  function startSession() {
+    // 📋 The context carries over between tasks in this session. The model
+    // remembers nothing between calls. What it sees on each call is this array
+    // plus the system prompt and the tool definitions, resent every time.
+    const context: ModelMessage[] = [];
 
-  // Run a task: add it to the context, hand over to the loop, then add
-  // everything the loop produced. Only here does the context change.
-  async function runTask(task: string): Promise<void> {
-    context.push({ role: "user", content: task });
-    const newMessages = await loop(agentDefinition, ui, context);
-    context.push(...newMessages);
+    // Run a task: add it to the context, hand over to the loop, then add
+    // everything the loop produced. Only here does the context change.
+    async function runTask(task: string): Promise<void> {
+      context.push(taskMessage(task));
+      const newMessages = await loop(agentDefinition, ui, context);
+      context.push(...newMessages);
+    }
+
+    return { runTask };
   }
 
-  // Forget everything: the next task starts from an empty context. The
-  // environment keeps every change already made.
-  function clearContext(): void {
-    context.length = 0;
-  }
-
-  return { runTask, clearContext };
+  return { startSession };
 }
 
 // --- 3. The loop -----------------------------------------------------------
@@ -72,15 +74,14 @@ async function loop(agentDefinition: AgentDefinition, ui: UserInterface, context
     // 🧠 One model call = one decision. We send the full context every time.
     // The SDK returns the model's requested tool calls and stops after this
     // single call, because none of the tools has an `execute`.
-    const messages = [...context, ...newMessages];
     const reply = await generateText({
       model: agentDefinition.model,
       instructions: agentDefinition.systemPrompt, // the AI SDK calls the system prompt "instructions"
-      messages,
+      messages: [...context, ...newMessages], // the session so far, plus this task's messages
       tools: toolDefinitions(agentDefinition.tools),
       maxOutputTokens: 16_000,
     });
-    newMessages.push(...reply.response.messages);
+    newMessages.push(...reply.finalStep.response.messages); // one call, so the final step is the only step
     if (reply.text) ui.print(`\n💬 ${reply.text}`);
 
     // END #1, decided by the model: it replied without asking for any tool.
@@ -91,7 +92,7 @@ async function loop(agentDefinition: AgentDefinition, ui: UserInterface, context
     }
 
     const results = await runTools(reply.toolCalls, agentDefinition.tools, ui);
-    if (results.length > 0) newMessages.push({ role: "tool", content: results });
+    if (results.length > 0) newMessages.push(toolResultsMessage(results));
   }
 
   // END #2, decided by the harness: the step budget ran out.
@@ -99,7 +100,11 @@ async function loop(agentDefinition: AgentDefinition, ui: UserInterface, context
   return newMessages;
 }
 
-// --- 4. What the model sees of the tools -----------------------------------
+// --- 4. What the model sees ------------------------------------------------
+
+// The only place that knows the SDK's message format. The rest of the harness
+// deals in tasks, tool calls and results; these turn them into what the model
+// reads. (The model's own replies already come from the SDK in this format.)
 
 // What the model sees of each tool: description and schema, never `run`.
 // There's no `execute` either, so the AI SDK hands tool calls back to our
@@ -110,15 +115,32 @@ function toolDefinitions(tools: Record<string, Tool>) {
   );
 }
 
+// A task, as the model sees it: a message from the user.
+function taskMessage(task: string): ModelMessage {
+  return { role: "user", content: task };
+}
+
+// Tool results, as the model sees them: one message with a result per call.
+function toolResultsMessage(results: ToolResult[]): ModelMessage {
+  const content: ToolResultPart[] = results.map(({ call, output, isError }) => ({
+    type: "tool-result",
+    toolCallId: call.toolCallId, // links this result to the request that asked for it
+    toolName: call.toolName,
+    output: isError ? { type: "error-text", value: output } : { type: "text", value: output },
+  }));
+  return { role: "tool", content };
+}
+
 // --- 5. 🔧 Running tool calls ----------------------------------------------
 
 type ToolCall = Awaited<ReturnType<typeof generateText>>["toolCalls"][number];
 type ToolOutcome = { output: string; isError: boolean };
+type ToolResult = ToolOutcome & { call: ToolCall }; // an outcome, and the call it answers
 
 // Run every tool the model asked for, and collect one result per call.
 // The model may ask for several at once; all results go back together.
-async function runTools(calls: ToolCall[], tools: Record<string, Tool>, ui: UserInterface) {
-  const results: ToolResultPart[] = [];
+async function runTools(calls: ToolCall[], tools: Record<string, Tool>, ui: UserInterface): Promise<ToolResult[]> {
+  const results: ToolResult[] = [];
   for (const call of calls) {
     ui.print(`\n🔧 ${call.toolName} ${JSON.stringify(call.input)}`);
 
@@ -131,12 +153,7 @@ async function runTools(calls: ToolCall[], tools: Record<string, Tool>, ui: User
 
     const { output, isError } = await runToolCall(call, tools, ui);
     ui.print(`   ${isError ? "❌" : "✅"} ${output.slice(0, 200)}`); // a short preview
-    results.push({
-      type: "tool-result",
-      toolCallId: call.toolCallId, // links this result to the request that asked for it
-      toolName: call.toolName,
-      output: isError ? { type: "error-text", value: output } : { type: "text", value: output },
-    });
+    results.push({ call, output, isError });
   }
   return results;
 }
